@@ -33,6 +33,7 @@
 #include <linux/log2.h>
 #include <linux/cma.h>
 #include <linux/highmem.h>
+#include <linux/swap.h>
 
 struct cma {
 	unsigned long	base_pfn;
@@ -127,6 +128,27 @@ err:
 	return -EINVAL;
 }
 
+#ifdef CONFIG_CMA_AGGRESSIVE
+/* The counter for the dma_alloc_from_contiguous and
+   dma_release_from_contiguous.  */
+atomic_t cma_alloc_counter = ATOMIC_INIT(0);
+
+/* Swich of CMA_AGGRESSIVE.  */
+int cma_aggressive_switch __read_mostly;
+
+/* If the number of CMA free pages is small than this value, CMA_AGGRESSIVE will
+   not work. */
+#ifdef CONFIG_CMA_AGGRESSIVE_FREE_MIN
+unsigned long cma_aggressive_free_min __read_mostly =
+					CONFIG_CMA_AGGRESSIVE_FREE_MIN;
+#else
+unsigned long cma_aggressive_free_min __read_mostly = 500;
+#endif
+
+/* Swich of CMA_AGGRESSIVE shink.  */
+int cma_aggressive_shrink_switch __read_mostly;
+#endif
+
 static int __init cma_init_reserved_areas(void)
 {
 	int i;
@@ -137,6 +159,22 @@ static int __init cma_init_reserved_areas(void)
 		if (ret)
 			return ret;
 	}
+
+#ifdef CONFIG_CMA_AGGRESSIVE
+	cma_aggressive_switch = 0;
+#ifdef CONFIG_CMA_AGGRESSIVE_PHY_MAX
+	if (memblock_phys_mem_size() <= CONFIG_CMA_AGGRESSIVE_PHY_MAX)
+#else
+	if (memblock_phys_mem_size() <= 0x40000000)
+#endif
+		cma_aggressive_switch = 1;
+
+	cma_aggressive_shrink_switch = 0;
+#ifdef CONFIG_CMA_AGGRESSIVE_SHRINK
+	if (cma_aggressive_switch)
+		cma_aggressive_shrink_switch = 1;
+#endif
+#endif
 
 	return 0;
 }
@@ -312,6 +350,11 @@ struct page *cma_alloc(struct cma *cma, int count, unsigned int align)
 	unsigned long bitmap_maxno, bitmap_no, bitmap_count;
 	struct page *page = NULL;
 	int ret;
+#ifdef CONFIG_CMA_AGGRESSIVE
+	int free = global_page_state(NR_FREE_PAGES)
+			- global_page_state(NR_FREE_CMA_PAGES)
+			- totalreserve_pages;
+#endif
 
 	if (!cma || !cma->count)
 		return NULL;
@@ -325,6 +368,13 @@ struct page *cma_alloc(struct cma *cma, int count, unsigned int align)
 	mask = cma_bitmap_aligned_mask(cma, align);
 	bitmap_maxno = cma_bitmap_maxno(cma);
 	bitmap_count = cma_bitmap_pages_to_bits(cma, count);
+
+#ifdef CONFIG_CMA_AGGRESSIVE
+	atomic_inc(&cma_alloc_counter);
+	if (cma_aggressive_switch && cma_aggressive_shrink_switch
+	    && free < count)
+		shrink_all_memory_for_cma(count - free);
+#endif
 
 	for (;;) {
 		mutex_lock(&cma->lock);
@@ -360,6 +410,10 @@ struct page *cma_alloc(struct cma *cma, int count, unsigned int align)
 		/* try again with a bit different memory target */
 		start = bitmap_no + mask + 1;
 	}
+
+#ifdef CONFIG_CMA_AGGRESSIVE
+	atomic_dec(&cma_alloc_counter);
+#endif
 
 	pr_debug("%s(): returned %p\n", __func__, page);
 	return page;

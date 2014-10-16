@@ -15,6 +15,13 @@
 
 struct cma;
 
+#ifdef CONFIG_CMA_AGGRESSIVE
+extern atomic_t cma_alloc_counter;
+extern int cma_aggressive_switch;
+extern unsigned long cma_aggressive_free_min;
+extern int cma_aggressive_shrink_switch;
+#endif
+
 extern phys_addr_t cma_get_base(struct cma *cma);
 extern unsigned long cma_get_size(struct cma *cma);
 

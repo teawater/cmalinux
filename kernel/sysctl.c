@@ -92,6 +92,10 @@
 #include <linux/nmi.h>
 #endif
 
+#ifdef CONFIG_CMA_AGGRESSIVE
+#include <linux/cma.h>
+#endif
+
 
 #if defined(CONFIG_SYSCTL)
 
@@ -1485,6 +1489,29 @@ static struct ctl_table vm_table[] = {
 		.mode		= 0644,
 		.proc_handler	= proc_doulongvec_minmax,
 	},
+#ifdef CONFIG_CMA_AGGRESSIVE
+	{
+		.procname	= "cma-aggressive-switch",
+		.data		= &cma_aggressive_switch,
+		.maxlen		= sizeof(int),
+		.mode		= 0600,
+		.proc_handler	= proc_dointvec,
+	},
+	{
+		.procname	= "cma-aggressive-free-min",
+		.data		= &cma_aggressive_free_min,
+		.maxlen		= sizeof(unsigned long),
+		.mode		= 0600,
+		.proc_handler	= proc_doulongvec_minmax,
+	},
+	{
+		.procname	= "cma-aggressive-shrink-switch",
+		.data		= &cma_aggressive_shrink_switch,
+		.maxlen		= sizeof(int),
+		.mode		= 0600,
+		.proc_handler	= proc_dointvec,
+	},
+#endif
 	{ }
 };
 
