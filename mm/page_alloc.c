@@ -65,6 +65,10 @@
 #include <asm/div64.h>
 #include "internal.h"
 
+#ifdef CONFIG_CMA_AGGRESSIVE
+#include <linux/cma.h>
+#endif
+
 /* prevent >1 _updater_ of zone percpu pageset ->high and ->batch fields */
 static DEFINE_MUTEX(pcp_batch_high_lock);
 #define MIN_PERCPU_PAGELIST_FRACTION	(8)
@@ -1189,20 +1193,36 @@ static struct page *__rmqueue(struct zone *zone, unsigned int order,
 {
 	struct page *page;
 
-retry_reserve:
+#ifdef CONFIG_CMA_AGGRESSIVE
+	if (cma_aggressive_switch
+	    && migratetype == MIGRATE_MOVABLE
+	    && atomic_read(&cma_alloc_counter) == 0
+	    && global_page_state(NR_FREE_CMA_PAGES) > cma_aggressive_free_min
+							+ (1 << order))
+		migratetype = MIGRATE_CMA;
+#endif
+retry:
 	page = __rmqueue_smallest(zone, order, migratetype);
 
-	if (unlikely(!page) && migratetype != MIGRATE_RESERVE) {
-		page = __rmqueue_fallback(zone, order, migratetype);
+	if (unlikely(!page)) {
+#ifdef CONFIG_CMA_AGGRESSIVE
+		if (migratetype == MIGRATE_CMA) {
+			migratetype = MIGRATE_MOVABLE;
+			goto retry;
+		}
+#endif
+		if (migratetype != MIGRATE_RESERVE) {
+			page = __rmqueue_fallback(zone, order, migratetype);
 
-		/*
-		 * Use MIGRATE_RESERVE rather than fail an allocation. goto
-		 * is used because __rmqueue_smallest is an inline function
-		 * and we want just one call site
-		 */
-		if (!page) {
-			migratetype = MIGRATE_RESERVE;
-			goto retry_reserve;
+			/*
+			* Use MIGRATE_RESERVE rather than fail an allocation.
+			* goto is used because __rmqueue_smallest is an inline
+			* function and we want just one call site
+			*/
+			if (!page) {
+				migratetype = MIGRATE_RESERVE;
+				goto retry;
+			}
 		}
 	}
 
