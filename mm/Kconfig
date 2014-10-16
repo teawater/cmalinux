@@ -527,6 +527,49 @@ config CMA_AREAS
 
 	  If unsure, leave the default value "7".
 
+config CMA_AGGRESSIVE
+	bool "CMA aggressive"
+	depends on CMA
+	default n
+	help
+	  Be more aggressive about taking memory from CMA when allocate MOVABLE
+	  page.
+	  Sysctl "vm.cma-aggressive-switch", "vm.cma-aggressive-alloc-max"
+	  and "vm.cma-aggressive-shrink-switch" can control this function.
+	  If unsure, say "n".
+
+config CMA_AGGRESSIVE_PHY_MAX
+	hex "Physical memory size in Bytes that auto turn on the CMA aggressive switch"
+	depends on CMA_AGGRESSIVE
+	default 0x40000000
+	help
+	  If physical memory size (not include CMA memory) in byte less than or
+	  equal to this value, CMA aggressive switch will be opened.
+	  After the Linux boot, sysctl "vm.cma-aggressive-switch" can control
+	  the CMA AGGRESSIVE switch.
+
+config CMA_AGGRESSIVE_FREE_MIN
+	int "The minimum free CMA page number that CMA aggressive work"
+	depends on CMA_AGGRESSIVE
+	default 500
+	help
+	  When system boot, this value will set to sysctl
+	  "vm.cma-aggressive-free-min".
+	  If the number of CMA free pages is small than this sysctl value,
+	  CMA aggressive will not work.
+
+config CMA_AGGRESSIVE_SHRINK
+	bool "CMA aggressive shrink"
+	depends on CMA_AGGRESSIVE
+	default y
+	help
+	  If this value is true, sysctl "vm.cma-aggressive-shrink-switch" will
+	  be set to true when Linux boot.
+	  If sysctl "vm.cma-aggressive-shrink-switch" is true and free normal
+	  memory's size is smaller than the size that it want to allocate,
+	  do memory shrink before driver allocate pages from CMA.
+	  If unsure, say "y".
+
 config MEM_SOFT_DIRTY
 	bool "Track memory changes"
 	depends on CHECKPOINT_RESTORE && HAVE_ARCH_SOFT_DIRTY && PROC_FS
